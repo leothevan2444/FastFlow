@@ -7,6 +7,16 @@ from PIL import Image
 from torchvision import transforms
 
 
+IMG_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG")
+
+
+def find_images(*path_parts):
+    image_files = []
+    for extension in IMG_EXTENSIONS:
+        image_files.extend(glob(os.path.join(*path_parts, extension)))
+    return sorted(image_files)
+
+
 class MVTecDataset(torch.utils.data.Dataset):
     def __init__(self, root, category, input_size, is_train=True):
         self.image_transform = transforms.Compose(
@@ -17,11 +27,9 @@ class MVTecDataset(torch.utils.data.Dataset):
             ]
         )
         if is_train:
-            self.image_files = glob(
-                os.path.join(root, category, "train", "good", "*.png")
-            )
+            self.image_files = find_images(root, category, "train", "good")
         else:
-            self.image_files = glob(os.path.join(root, category, "test", "*", "*.png"))
+            self.image_files = find_images(root, category, "test", "*")
             self.target_transform = transforms.Compose(
                 [
                     transforms.Resize(
@@ -35,7 +43,7 @@ class MVTecDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         image_file = self.image_files[index]
-        image = Image.open(image_file)
+        image = Image.open(image_file).convert("RGB")
         image = self.image_transform(image)
         if self.is_train:
             return image
@@ -43,11 +51,9 @@ class MVTecDataset(torch.utils.data.Dataset):
             if os.path.dirname(image_file).endswith("good"):
                 target = torch.zeros([1, image.shape[-2], image.shape[-1]])
             else:
-                target = Image.open(
-                    image_file.replace("/test/", "/ground_truth/").replace(
-                        ".png", "_mask.png"
-                    )
-                )
+                mask_file = image_file.replace("/test/", "/ground_truth/")
+                mask_file = os.path.splitext(mask_file)[0] + "_mask.png"
+                target = Image.open(mask_file).convert("L")
                 target = self.target_transform(target)
             return image, target
 
