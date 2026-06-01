@@ -41,6 +41,28 @@ python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category
 python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category] --eval -ckpt _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt
 ```
 
+## Inference and visualization
+
+After training, run `infer.py` on a single image or a folder:
+
+```bash
+python infer.py \
+    -cfg configs/resnet18.yaml \
+    -ckpt _fastflow_experiment_checkpoints/exp0/499.pt \
+    -i path/to/mvtec-ad/bottle/test/broken_large \
+    -o fastflow_outputs \
+    --threshold 128
+```
+
+For each input image, the script saves:
+
+- `*_anomaly_map.png`: normalized anomaly score map.
+- `*_heatmap.png`: color heatmap, where warmer colors mean more anomalous.
+- `*_mask.png`: binary anomaly mask from `--threshold`.
+- `*_overlay.png`: heatmap blended with the input image.
+- `*_segmentation.png`: anomaly segmentation overlay.
+- `*_panel.png`: original, heatmap, mask, overlay, and segmentation side by side.
+
 ## Performance
 As the training process is not stable, I paste both the performance of the last (500th) epoch and the best epoch.
 
@@ -63,5 +85,3 @@ As the training process is not stable, I paste both the performance of the last 
 | zipper            | 0.980/0.987    | 0.969/0.979     | 0.966/0.974     | 0.972/0.984     |
 | __MEAN__          | __0.972/0.983__ | __0.956/0.972__ | __0.973/0.981__ | __0.973/0.983__ |
 | Paper             | 0.981          | 0.972           | 0.981           | 0.985           |
-
-
