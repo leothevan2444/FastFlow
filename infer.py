@@ -10,10 +10,11 @@ from torchvision import transforms
 
 import fastflow
 
-
+CLASSIFICATION_THRESHOLD = -0.15
 IMG_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG")
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+PADDING_COLOR = (0, 0, 0) 
 
 
 def build_model(config, checkpoint_path, device):
@@ -49,6 +50,32 @@ def normalize_map(anomaly_map):
         return np.zeros_like(anomaly_map, dtype=np.uint8)
     anomaly_map = (anomaly_map - map_min) / (map_max - map_min)
     return (anomaly_map * 255).clip(0, 255).astype(np.uint8)
+
+
+def raw_map_to_uint8(anomaly_map):
+    score_map = 1.0 + anomaly_map.astype(np.float32)
+    return (score_map.clip(0.0, 1.0) * 255).astype(np.uint8)
+
+
+def resize_and_pad(image, input_size):
+    width, height = image.size
+    scale = float(input_size) / max(width, height)
+    resized_width = max(1, int(round(width * scale)))
+    resized_height = max(1, int(round(height * scale)))
+    resized = image.resize((resized_width, resized_height), Image.BILINEAR)
+
+    padded = Image.new("RGB", (input_size, input_size), color=PADDING_COLOR)
+    left = (input_size - resized_width) // 2
+    top = (input_size - resized_height) // 2
+    padded.paste(resized, (left, top))
+    content_box = (left, top, left + resized_width, top + resized_height)
+    has_padding = resized_width != input_size or resized_height != input_size
+    return padded, content_box, has_padding
+
+
+def crop_to_content(anomaly_map, content_box):
+    left, top, right, bottom = content_box
+    return anomaly_map[top:bottom, left:right]
 
 
 def make_heatmap(gray):
@@ -91,15 +118,23 @@ def save_panel(image, heatmap, mask, overlay, segmentation, output_path):
     canvas.save(output_path)
 
 
-def infer_one(model, image_path, transform, output_dir, threshold, alpha, device):
+def infer_one(model, image_path, transform, input_size, output_dir, threshold, alpha, device):
     image = Image.open(image_path).convert("RGB")
-    tensor = transform(image).unsqueeze(0).to(device)
+    padded_image, content_box, has_padding = resize_and_pad(image, input_size)
+    tensor = transform(padded_image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         ret = model(tensor)
 
     anomaly_map = ret["anomaly_map"][0, 0].detach().cpu().numpy()
-    normalized_map = normalize_map(anomaly_map)
+    content_map = crop_to_content(anomaly_map, content_box)
+    max_score = float(content_map.max())
+    mean_score = float(content_map.mean())
+    raw_score_map = raw_map_to_uint8(content_map)
+    raw_score_map = np.asarray(
+        Image.fromarray(raw_score_map).resize(image.size, Image.BILINEAR)
+    )
+    normalized_map = normalize_map(content_map)
     normalized_map = np.asarray(
         Image.fromarray(normalized_map).resize(image.size, Image.BILINEAR)
     )
@@ -110,6 +145,9 @@ def infer_one(model, image_path, transform, output_dir, threshold, alpha, device
 
     stem = os.path.splitext(os.path.basename(image_path))[0]
     os.makedirs(output_dir, exist_ok=True)
+    if has_padding:
+        padded_image.save(os.path.join(output_dir, f"{stem}_padded_input.png"))
+    Image.fromarray(raw_score_map).save(os.path.join(output_dir, f"{stem}_raw_score_map.png"))
     Image.fromarray(normalized_map).save(os.path.join(output_dir, f"{stem}_anomaly_map.png"))
     Image.fromarray(heatmap).save(os.path.join(output_dir, f"{stem}_heatmap.png"))
     Image.fromarray(mask).save(os.path.join(output_dir, f"{stem}_mask.png"))
@@ -124,7 +162,7 @@ def infer_one(model, image_path, transform, output_dir, threshold, alpha, device
         os.path.join(output_dir, f"{stem}_panel.png"),
     )
 
-    return float(normalized_map.max()), float(normalized_map.mean())
+    return max_score, mean_score
 
 
 def parse_args():
@@ -149,7 +187,6 @@ def main():
     input_size = config["input_size"]
     transform = transforms.Compose(
         [
-            transforms.Resize(input_size),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ]
@@ -171,12 +208,14 @@ def main():
             model,
             image_path,
             transform,
+            input_size,
             output_dir,
             args.threshold,
             args.alpha,
             args.device,
         )
-        print(f"{image_path}: max={max_score:.1f}, mean={mean_score:.1f}")
+        good = max_score < CLASSIFICATION_THRESHOLD
+        print(f"{image_path}: max={max_score:.1f}, mean={mean_score:.1f}, good={good}")
 
 
 if __name__ == "__main__":

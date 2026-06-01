@@ -54,9 +54,14 @@ python infer.py \
     --threshold 128
 ```
 
+Non-square images are resized with their aspect ratio preserved, padded to a square
+model input, and then mapped back to the original image size for visualization.
+
 For each input image, the script saves:
 
+- `*_padded_input.png`: padded model input, saved only when padding is applied.
 - `*_anomaly_map.png`: normalized anomaly score map.
+- `*_raw_score_map.png`: unstretched anomaly score map using a fixed `1 + anomaly_map` scale.
 - `*_heatmap.png`: color heatmap, where warmer colors mean more anomalous.
 - `*_mask.png`: binary anomaly mask from `--threshold`.
 - `*_overlay.png`: heatmap blended with the input image.
