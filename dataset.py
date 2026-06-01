@@ -24,8 +24,11 @@ class MVTecDataset(torch.utils.data.Dataset):
             self.image_files = glob(os.path.join(root, category, "test", "*", "*.png"))
             self.target_transform = transforms.Compose(
                 [
-                    transforms.Resize(input_size),
+                    transforms.Resize(
+                        input_size, interpolation=transforms.InterpolationMode.NEAREST
+                    ),
                     transforms.ToTensor(),
+                    transforms.Lambda(lambda target: (target > 0.5).float()),
                 ]
             )
         self.is_train = is_train
