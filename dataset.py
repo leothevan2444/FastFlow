@@ -10,6 +10,24 @@ from torchvision import transforms
 IMG_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG")
 
 
+class SquarePad:
+    def __init__(self, fill=0):
+        self.fill = fill
+
+    def __call__(self, image):
+        width, height = image.size
+        max_size = max(width, height)
+        pad_left = (max_size - width) // 2
+        pad_top = (max_size - height) // 2
+        pad_right = max_size - width - pad_left
+        pad_bottom = max_size - height - pad_top
+        return transforms.functional.pad(
+            image,
+            padding=[pad_left, pad_top, pad_right, pad_bottom],
+            fill=self.fill,
+        )
+
+
 def find_images(*path_parts):
     image_files = []
     for extension in IMG_EXTENSIONS:
@@ -21,7 +39,8 @@ class MVTecDataset(torch.utils.data.Dataset):
     def __init__(self, root, category, input_size, is_train=True):
         self.image_transform = transforms.Compose(
             [
-                transforms.Resize(input_size),
+                SquarePad(fill=0),
+                transforms.Resize((input_size, input_size)),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
@@ -32,8 +51,10 @@ class MVTecDataset(torch.utils.data.Dataset):
             self.image_files = find_images(root, category, "test", "*")
             self.target_transform = transforms.Compose(
                 [
+                    SquarePad(fill=0),
                     transforms.Resize(
-                        input_size, interpolation=transforms.InterpolationMode.NEAREST
+                        (input_size, input_size),
+                        interpolation=transforms.InterpolationMode.NEAREST,
                     ),
                     transforms.ToTensor(),
                     transforms.Lambda(lambda target: (target > 0.5).float()),
