@@ -11,6 +11,13 @@ import fastflow
 import utils
 
 
+def resolve_device(device):
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        print("CUDA is not available, falling back to CPU.")
+        return torch.device("cpu")
+    return torch.device(device)
+
+
 def build_train_data_loader(args, config):
     train_dataset = dataset.MVTecDataset(
         root=args.data,
@@ -65,12 +72,12 @@ def build_optimizer(model):
     )
 
 
-def train_one_epoch(dataloader, model, optimizer, epoch):
+def train_one_epoch(dataloader, model, optimizer, epoch, device):
     model.train()
     loss_meter = utils.AverageMeter()
     for step, data in enumerate(dataloader):
         # forward
-        data = data.cuda()
+        data = data.to(device)
         ret = model(data)
         loss = ret["loss"]
         # backward
@@ -87,11 +94,11 @@ def train_one_epoch(dataloader, model, optimizer, epoch):
             )
 
 
-def eval_once(dataloader, model):
+def eval_once(dataloader, model, device):
     model.eval()
     auroc_metric = metrics.ROC_AUC()
     for data, targets in dataloader:
-        data, targets = data.cuda(), targets.cuda()
+        data, targets = data.to(device), targets.to(device)
         with torch.no_grad():
             ret = model(data)
         outputs = ret["anomaly_map"].cpu().detach()
@@ -103,6 +110,7 @@ def eval_once(dataloader, model):
 
 
 def train(args):
+    device = resolve_device(args.device)
     os.makedirs(const.CHECKPOINT_DIR, exist_ok=True)
     checkpoint_dir = os.path.join(
         const.CHECKPOINT_DIR, "exp%d" % len(os.listdir(const.CHECKPOINT_DIR))
@@ -115,12 +123,13 @@ def train(args):
 
     train_dataloader = build_train_data_loader(args, config)
     test_dataloader = build_test_data_loader(args, config)
-    model.cuda()
+    model.to(device)
+    print("Using device: {}".format(device))
 
     for epoch in range(const.NUM_EPOCHS):
-        train_one_epoch(train_dataloader, model, optimizer, epoch)
+        train_one_epoch(train_dataloader, model, optimizer, epoch, device)
         if (epoch + 1) % const.EVAL_INTERVAL == 0:
-            eval_once(test_dataloader, model)
+            eval_once(test_dataloader, model, device)
         if (epoch + 1) % const.CHECKPOINT_INTERVAL == 0:
             torch.save(
                 {
@@ -134,13 +143,15 @@ def train(args):
 
 
 def evaluate(args):
+    device = resolve_device(args.device)
     config = yaml.safe_load(open(args.config, "r"))
     model = build_model(config)
-    checkpoint = torch.load(args.checkpoint)
+    checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     test_dataloader = build_test_data_loader(args, config)
-    model.cuda()
-    eval_once(test_dataloader, model)
+    model.to(device)
+    print("Using device: {}".format(device))
+    eval_once(test_dataloader, model, device)
 
 
 def parse_args():
@@ -160,6 +171,12 @@ def parse_args():
     parser.add_argument("--eval", action="store_true", help="run eval only")
     parser.add_argument(
         "-ckpt", "--checkpoint", type=str, help="path to load checkpoint"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="device to use, e.g. cuda, cuda:0, cuda:1, or cpu",
     )
     args = parser.parse_args()
     return args

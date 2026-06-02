@@ -18,9 +18,16 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 PADDING_COLOR = (0, 0, 0) 
 
 
+def resolve_device(device):
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        print("CUDA is not available, falling back to CPU.")
+        return torch.device("cpu")
+    return torch.device(device)
+
+
 def sync_device(device):
     if str(device).startswith("cuda") and torch.cuda.is_available():
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device)
 
 
 def load_checkpoint(checkpoint_path, device):
@@ -228,15 +235,18 @@ def parse_args():
     parser.add_argument("-o", "--output", type=str, default="fastflow_outputs", help="output folder")
     parser.add_argument("--threshold", type=int, default=128, help="binary mask threshold in [0, 255]")
     parser.add_argument("--alpha", type=float, default=0.45, help="heatmap overlay alpha in [0, 1]")
-    parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"], help="inference device")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="device to use, e.g. cuda, cuda:0, cuda:1, or cpu",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    if args.device == "cuda" and not torch.cuda.is_available():
-        print("CUDA is not available, falling back to CPU.")
-        args.device = "cpu"
+    device = resolve_device(args.device)
 
     config = yaml.safe_load(open(args.config, "r"))
     input_size = config["input_size"]
@@ -247,7 +257,8 @@ def main():
         ]
     )
 
-    model = build_model(config, args.checkpoint, args.device)
+    model = build_model(config, args.checkpoint, device)
+    print("Using device: {}".format(device))
     image_files = collect_images(args.input)
     if len(image_files) == 0:
         raise FileNotFoundError(f"No images found in {args.input}")
@@ -270,7 +281,7 @@ def main():
             output_dir,
             args.threshold,
             args.alpha,
-            args.device,
+            device,
         )
         preprocess_times.append(preprocess_time)
         forward_times.append(forward_time)
