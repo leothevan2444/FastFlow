@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 from glob import glob
 
 import numpy as np
@@ -15,6 +16,11 @@ IMG_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG")
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 PADDING_COLOR = (0, 0, 0) 
+
+
+def sync_device(device):
+    if str(device).startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 
 def load_checkpoint(checkpoint_path, device):
@@ -155,17 +161,30 @@ def save_panel(image, heatmap, mask, overlay, segmentation, output_path):
 
 
 def infer_one(model, image_path, transform, input_size, output_dir, threshold, alpha, device):
+    sync_device(device)
+    preprocess_start = time.perf_counter()
+
     image = Image.open(image_path).convert("RGB")
     padded_image, content_box, has_padding = resize_and_pad(image, input_size)
     tensor = transform(padded_image).unsqueeze(0).to(device)
+    sync_device(device)
+    preprocess_time = time.perf_counter() - preprocess_start
 
+    forward_start = time.perf_counter()
     with torch.no_grad():
         ret = model(tensor)
+    sync_device(device)
+    forward_time = time.perf_counter() - forward_start
 
+    postprocess_start = time.perf_counter()
     anomaly_map = ret["anomaly_map"][0, 0].detach().cpu().numpy()
     content_map = crop_to_content(anomaly_map, content_box)
     max_score = float(content_map.max())
     mean_score = float(content_map.mean())
+    sync_device(device)
+    postprocess_time = time.perf_counter() - postprocess_start
+    infer_time = preprocess_time + forward_time + postprocess_time
+
     raw_score_map = raw_map_to_uint8(content_map)
     raw_score_map = np.asarray(
         Image.fromarray(raw_score_map).resize(image.size, Image.BILINEAR)
@@ -198,7 +217,7 @@ def infer_one(model, image_path, transform, input_size, output_dir, threshold, a
         os.path.join(output_dir, f"{stem}_panel.png"),
     )
 
-    return max_score, mean_score
+    return max_score, mean_score, preprocess_time, forward_time, infer_time
 
 
 def parse_args():
@@ -233,6 +252,9 @@ def main():
     if len(image_files) == 0:
         raise FileNotFoundError(f"No images found in {args.input}")
 
+    preprocess_times = []
+    forward_times = []
+    infer_times = []
     for image_path in image_files:
         relative_dir = ""
         if os.path.isdir(args.input):
@@ -240,7 +262,7 @@ def main():
             if relative_dir == ".":
                 relative_dir = ""
         output_dir = os.path.join(args.output, relative_dir)
-        max_score, mean_score = infer_one(
+        max_score, mean_score, preprocess_time, forward_time, infer_time = infer_one(
             model,
             image_path,
             transform,
@@ -250,8 +272,26 @@ def main():
             args.alpha,
             args.device,
         )
+        preprocess_times.append(preprocess_time)
+        forward_times.append(forward_time)
+        infer_times.append(infer_time)
         good = max_score < CLASSIFICATION_THRESHOLD
-        print(f"{image_path}: max={max_score:.1f}, mean={mean_score:.1f}, good={good}")
+        print(
+            f"{image_path}: max={max_score:.1f}, mean={mean_score:.1f}, "
+            f"good={good}, preprocess_ms={preprocess_time * 1000:.2f}, "
+            f"forward_ms={forward_time * 1000:.2f}, "
+            f"e2e_ms={infer_time * 1000:.2f}"
+        )
+
+    if infer_times:
+        avg_preprocess = sum(preprocess_times) / len(preprocess_times)
+        avg_forward = sum(forward_times) / len(forward_times)
+        avg_infer = sum(infer_times) / len(infer_times)
+        print(
+            f"Average preprocess_ms={avg_preprocess * 1000:.2f}, "
+            f"forward_ms={avg_forward * 1000:.2f}, "
+            f"e2e_ms={avg_infer * 1000:.2f}, images={len(infer_times)}"
+        )
 
 
 if __name__ == "__main__":
