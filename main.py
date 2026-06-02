@@ -125,6 +125,7 @@ def train(args):
             torch.save(
                 {
                     "epoch": epoch,
+                    "config": config,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                 },

@@ -3,3 +3,4 @@ _fastflow_experiment_checkpoints
 .vscode
 __pycache__
 venv
+fastflow_outputs/

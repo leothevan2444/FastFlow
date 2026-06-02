@@ -17,6 +17,41 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 PADDING_COLOR = (0, 0, 0) 
 
 
+def load_checkpoint(checkpoint_path, device):
+    try:
+        return torch.load(checkpoint_path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(checkpoint_path, map_location=device)
+
+
+def infer_resnet_input_size_from_checkpoint(checkpoint):
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    norm_weight = state_dict.get("norms.0.weight")
+    if norm_weight is None or norm_weight.ndim != 3:
+        return None
+    return int(norm_weight.shape[-1]) * 4
+
+
+def check_checkpoint_config(config, checkpoint):
+    checkpoint_config = checkpoint.get("config")
+    if checkpoint_config is not None:
+        checkpoint_input_size = checkpoint_config.get("input_size")
+    else:
+        checkpoint_input_size = infer_resnet_input_size_from_checkpoint(checkpoint)
+
+    if checkpoint_input_size is None:
+        return
+
+    config_input_size = config["input_size"]
+    if checkpoint_input_size != config_input_size:
+        raise ValueError(
+            "Checkpoint input_size does not match config input_size: "
+            f"checkpoint={checkpoint_input_size}, config={config_input_size}. "
+            "Use the same config file used for training, for example "
+            f"`-cfg configs/resnet18-{checkpoint_input_size}.yaml`."
+        )
+
+
 def build_model(config, checkpoint_path, device):
     model = fastflow.FastFlow(
         backbone_name=config["backbone_name"],
@@ -25,7 +60,8 @@ def build_model(config, checkpoint_path, device):
         conv3x3_only=config["conv3x3_only"],
         hidden_ratio=config["hidden_ratio"],
     )
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = load_checkpoint(checkpoint_path, device)
+    check_checkpoint_config(config, checkpoint)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()
