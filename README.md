@@ -34,11 +34,11 @@ mvtec-ad
 Take ResNet18 as example
 ```bash
 # train
-python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category]
+python main.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category]
 # checkpoint-dir defaults to _fastflow_experiment_checkpoints
 
 # eval
-python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category] --eval -ckpt _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt
+python main.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category] --eval --checkpoint _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt
 ```
 
 ## Inference and visualization
@@ -47,10 +47,10 @@ After training, run `infer.py` on a single image or a folder:
 
 ```bash
 python infer.py \
-    -cfg configs/resnet18.yaml \
-    -ckpt _fastflow_experiment_checkpoints/exp0/499.pt \
-    -i path/to/mvtec-ad/bottle/test/broken_large \
-    -o fastflow_outputs \
+    --config configs/resnet18.yaml \
+    --checkpoint _fastflow_experiment_checkpoints/exp0/499.pt \
+    --input path/to/mvtec-ad/bottle/test/broken_large \
+    --output fastflow_outputs \
     --threshold 128
 ```
 

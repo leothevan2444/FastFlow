@@ -15,7 +15,7 @@ CLASSIFICATION_THRESHOLD = -0.15
 IMG_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.PNG", "*.JPG", "*.JPEG")
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
-PADDING_COLOR = (0, 0, 0) 
+PADDING_COLOR = (0, 0, 0)
 
 
 def resolve_device(device):
@@ -61,7 +61,7 @@ def check_checkpoint_config(config, checkpoint):
             "Checkpoint input_size does not match config input_size: "
             f"checkpoint={checkpoint_input_size}, config={config_input_size}. "
             "Use the same config file used for training, for example "
-            f"`-cfg configs/resnet18-{checkpoint_input_size}.yaml`."
+            f"`--config configs/resnet18-{checkpoint_input_size}.yaml`."
         )
 
 
@@ -87,7 +87,9 @@ def collect_images(input_path):
 
     image_files = []
     for extension in IMG_EXTENSIONS:
-        image_files.extend(glob(os.path.join(input_path, "**", extension), recursive=True))
+        image_files.extend(
+            glob(os.path.join(input_path, "**", extension), recursive=True)
+        )
     return sorted(image_files)
 
 
@@ -167,7 +169,16 @@ def save_panel(image, heatmap, mask, overlay, segmentation, output_path):
     canvas.save(output_path)
 
 
-def infer_one(model, image_path, transform, input_size, output_dir, threshold, alpha, device):
+def infer_one(
+    model,
+    image_path,
+    transform,
+    input_size,
+    output_dir,
+    threshold,
+    alpha,
+    device,
+):
     sync_device(device)
     preprocess_start = time.perf_counter()
 
@@ -209,8 +220,12 @@ def infer_one(model, image_path, transform, input_size, output_dir, threshold, a
     os.makedirs(output_dir, exist_ok=True)
     if has_padding:
         padded_image.save(os.path.join(output_dir, f"{stem}_padded_input.png"))
-    Image.fromarray(raw_score_map).save(os.path.join(output_dir, f"{stem}_raw_score_map.png"))
-    Image.fromarray(normalized_map).save(os.path.join(output_dir, f"{stem}_anomaly_map.png"))
+    Image.fromarray(raw_score_map).save(
+        os.path.join(output_dir, f"{stem}_raw_score_map.png")
+    )
+    Image.fromarray(normalized_map).save(
+        os.path.join(output_dir, f"{stem}_anomaly_map.png")
+    )
     Image.fromarray(heatmap).save(os.path.join(output_dir, f"{stem}_heatmap.png"))
     Image.fromarray(mask).save(os.path.join(output_dir, f"{stem}_mask.png"))
     Image.fromarray(overlay).save(os.path.join(output_dir, f"{stem}_overlay.png"))
@@ -228,14 +243,56 @@ def infer_one(model, image_path, transform, input_size, output_dir, threshold, a
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run FastFlow inference and save visualizations")
-    parser.add_argument("-cfg", "--config", type=str, required=True, help="path to config file")
-    parser.add_argument("-ckpt", "--checkpoint", type=str, required=True, help="path to checkpoint")
-    parser.add_argument("-i", "--input", type=str, required=True, help="image file or image folder")
-    parser.add_argument("-o", "--output", type=str, default="fastflow_outputs", help="output folder")
-    parser.add_argument("--threshold", type=int, default=128, help="binary mask threshold in [0, 255]")
-    parser.add_argument("--alpha", type=float, default=0.45, help="heatmap overlay alpha in [0, 1]")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(
+        description="Run FastFlow inference and save visualizations",
+        add_help=False,
+    )
+    input_group = parser.add_argument_group("input")
+    output_group = parser.add_argument_group("output")
+    runtime_group = parser.add_argument_group("runtime")
+
+    runtime_group.add_argument(
+        "--help",
+        action="help",
+        help="show this help message and exit",
+    )
+    input_group.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="path to config file",
+    )
+    input_group.add_argument(
+        "--checkpoint",
+        type=str,
+        required=True,
+        help="path to checkpoint",
+    )
+    input_group.add_argument(
+        "--input",
+        type=str,
+        required=True,
+        help="image file or image folder",
+    )
+    output_group.add_argument(
+        "--output",
+        type=str,
+        default="fastflow_outputs",
+        help="output folder",
+    )
+    output_group.add_argument(
+        "--threshold",
+        type=int,
+        default=128,
+        help="binary mask threshold in [0, 255]",
+    )
+    output_group.add_argument(
+        "--alpha",
+        type=float,
+        default=0.45,
+        help="heatmap overlay alpha in [0, 1]",
+    )
+    runtime_group.add_argument(
         "--device",
         type=str,
         default="cuda",

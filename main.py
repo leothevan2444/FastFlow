@@ -164,57 +164,89 @@ def evaluate(args):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train FastFlow on MVTec-AD dataset")
-    parser.add_argument(
-        "-cfg", "--config", type=str, required=True, help="path to config file"
+    parser = argparse.ArgumentParser(
+        description="Train FastFlow on MVTec-AD dataset",
+        add_help=False,
     )
-    parser.add_argument("--data", type=str, required=True, help="path to mvtec folder")
-    parser.add_argument(
-        "-cat",
+    data_group = parser.add_argument_group("data")
+    runtime_group = parser.add_argument_group("runtime")
+    train_group = parser.add_argument_group("training")
+
+    runtime_group.add_argument(
+        "--help",
+        action="help",
+        help="show this help message and exit",
+    )
+    data_group.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="path to config file",
+    )
+    data_group.add_argument(
+        "--data",
+        type=str,
+        required=True,
+        help="path to dataset folder",
+    )
+    data_group.add_argument(
         "--category",
         type=str,
         required=True,
         help="category name",
     )
-    parser.add_argument("--eval", action="store_true", help="run eval only")
-    parser.add_argument(
-        "-ckpt", "--checkpoint", type=str, help="path to load checkpoint"
+    runtime_group.add_argument(
+        "--eval",
+        action="store_true",
+        help="run eval only",
     )
-    parser.add_argument(
+    runtime_group.add_argument(
+        "--checkpoint",
+        type=str,
+        help="path to load checkpoint",
+    )
+    runtime_group.add_argument(
         "--device",
         type=str,
         default="cuda",
         help="device to use, e.g. cuda, cuda:0, cuda:1, or cpu",
     )
-    parser.add_argument("--batch-size", type=positive_int, default=32, help="batch size")
-    parser.add_argument(
+    train_group.add_argument(
+        "--batch-size",
+        type=positive_int,
+        default=32,
+        help="batch size",
+    )
+    train_group.add_argument(
         "--epochs", type=positive_int, default=500, help="number of epochs"
     )
-    parser.add_argument(
+    train_group.add_argument(
         "--log-interval",
         type=positive_int,
         default=10,
         help="log every N train steps",
     )
-    parser.add_argument(
+    train_group.add_argument(
         "--eval-interval",
         type=positive_int,
         default=10,
         help="eval every N epochs",
     )
-    parser.add_argument(
+    train_group.add_argument(
         "--checkpoint-interval",
         type=positive_int,
         default=1,
         help="save checkpoint every N epochs",
     )
-    parser.add_argument(
+    train_group.add_argument(
         "--checkpoint-dir",
         type=str,
         default="_fastflow_experiment_checkpoints",
         help="directory to save training checkpoints",
     )
     args = parser.parse_args()
+    if args.eval and args.checkpoint is None:
+        parser.error("--checkpoint is required when --eval is set")
     return args
 
 
