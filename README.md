@@ -34,11 +34,11 @@ mvtec-ad
 Take ResNet18 as example
 ```bash
 # train
-python main.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category]
+python train.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category]
 # checkpoint-dir defaults to _fastflow_experiment_checkpoints
 
 # eval
-python main.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category] --eval --checkpoint _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt
+python train.py --config configs/resnet18.yaml --data path/to/mvtec-ad --category [category] --eval --checkpoint _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt
 ```
 
 ## Inference and visualization
