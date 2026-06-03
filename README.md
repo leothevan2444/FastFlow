@@ -35,7 +35,7 @@ Take ResNet18 as example
 ```bash
 # train
 python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category]
-# a folder named _fastflow_experiment_checkpoints will be created automatically to save checkpoints
+# checkpoint-dir defaults to _fastflow_experiment_checkpoints
 
 # eval
 python main.py -cfg configs/resnet18.yaml --data path/to/mvtec-ad -cat [category] --eval -ckpt _fastflow_experiment_checkpoints/exp[index]/[epoch#].pt

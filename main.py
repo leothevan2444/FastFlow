@@ -18,6 +18,13 @@ def resolve_device(device):
     return torch.device(device)
 
 
+def positive_int(value):
+    value = int(value)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return value
+
+
 def build_train_data_loader(args, config):
     train_dataset = dataset.MVTecDataset(
         root=args.data,
@@ -27,7 +34,7 @@ def build_train_data_loader(args, config):
     )
     return torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=const.BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=True,
         num_workers=4,
         drop_last=True,
@@ -43,7 +50,7 @@ def build_test_data_loader(args, config):
     )
     return torch.utils.data.DataLoader(
         test_dataset,
-        batch_size=const.BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=4,
         drop_last=False,
@@ -72,7 +79,7 @@ def build_optimizer(model):
     )
 
 
-def train_one_epoch(dataloader, model, optimizer, epoch, device):
+def train_one_epoch(dataloader, model, optimizer, epoch, device, log_interval):
     model.train()
     loss_meter = utils.AverageMeter()
     for step, data in enumerate(dataloader):
@@ -86,7 +93,7 @@ def train_one_epoch(dataloader, model, optimizer, epoch, device):
         optimizer.step()
         # log
         loss_meter.update(loss.item())
-        if (step + 1) % const.LOG_INTERVAL == 0 or (step + 1) == len(dataloader):
+        if (step + 1) % log_interval == 0 or (step + 1) == len(dataloader):
             print(
                 "Epoch {} - Step {}: loss = {:.3f}({:.3f})".format(
                     epoch + 1, step + 1, loss_meter.val, loss_meter.avg
@@ -111,9 +118,9 @@ def eval_once(dataloader, model, device):
 
 def train(args):
     device = resolve_device(args.device)
-    os.makedirs(const.CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
     checkpoint_dir = os.path.join(
-        const.CHECKPOINT_DIR, "exp%d" % len(os.listdir(const.CHECKPOINT_DIR))
+        args.checkpoint_dir, "exp%d" % len(os.listdir(args.checkpoint_dir))
     )
     os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -126,11 +133,13 @@ def train(args):
     model.to(device)
     print("Using device: {}".format(device))
 
-    for epoch in range(const.NUM_EPOCHS):
-        train_one_epoch(train_dataloader, model, optimizer, epoch, device)
-        if (epoch + 1) % const.EVAL_INTERVAL == 0:
+    for epoch in range(args.epochs):
+        train_one_epoch(
+            train_dataloader, model, optimizer, epoch, device, args.log_interval
+        )
+        if (epoch + 1) % args.eval_interval == 0:
             eval_once(test_dataloader, model, device)
-        if (epoch + 1) % const.CHECKPOINT_INTERVAL == 0:
+        if (epoch + 1) % args.checkpoint_interval == 0:
             torch.save(
                 {
                     "epoch": epoch,
@@ -164,9 +173,8 @@ def parse_args():
         "-cat",
         "--category",
         type=str,
-        choices=const.MVTEC_CATEGORIES,
         required=True,
-        help="category name in mvtec",
+        help="category name",
     )
     parser.add_argument("--eval", action="store_true", help="run eval only")
     parser.add_argument(
@@ -177,6 +185,34 @@ def parse_args():
         type=str,
         default="cuda",
         help="device to use, e.g. cuda, cuda:0, cuda:1, or cpu",
+    )
+    parser.add_argument("--batch-size", type=positive_int, default=32, help="batch size")
+    parser.add_argument(
+        "--epochs", type=positive_int, default=500, help="number of epochs"
+    )
+    parser.add_argument(
+        "--log-interval",
+        type=positive_int,
+        default=10,
+        help="log every N train steps",
+    )
+    parser.add_argument(
+        "--eval-interval",
+        type=positive_int,
+        default=10,
+        help="eval every N epochs",
+    )
+    parser.add_argument(
+        "--checkpoint-interval",
+        type=positive_int,
+        default=1,
+        help="save checkpoint every N epochs",
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=str,
+        default="_fastflow_experiment_checkpoints",
+        help="directory to save training checkpoints",
     )
     args = parser.parse_args()
     return args
