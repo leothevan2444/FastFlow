@@ -4,6 +4,7 @@ import os
 import torch
 import yaml
 from ignite.contrib import metrics
+from tqdm.auto import tqdm
 
 import constants as const
 import dataset
@@ -79,10 +80,20 @@ def build_optimizer(model):
     )
 
 
-def train_one_epoch(dataloader, model, optimizer, epoch, device, log_interval):
+def train_one_epoch(
+    dataloader, model, optimizer, epoch, total_epochs, device, log_interval
+):
     model.train()
     loss_meter = utils.AverageMeter()
-    for step, data in enumerate(dataloader):
+    progress = tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        desc="Epoch {}/{}".format(epoch + 1, total_epochs),
+        unit="batch",
+        dynamic_ncols=True,
+        leave=True,
+    )
+    for step, data in progress:
         # forward
         data = data.to(device)
         ret = model(data)
@@ -94,17 +105,24 @@ def train_one_epoch(dataloader, model, optimizer, epoch, device, log_interval):
         # log
         loss_meter.update(loss.item())
         if (step + 1) % log_interval == 0 or (step + 1) == len(dataloader):
-            print(
-                "Epoch {} - Step {}: loss = {:.3f}({:.3f})".format(
-                    epoch + 1, step + 1, loss_meter.val, loss_meter.avg
-                )
+            progress.set_postfix(
+                loss="{:.3f}".format(loss_meter.val),
+                avg="{:.3f}".format(loss_meter.avg),
             )
 
 
 def eval_once(dataloader, model, device):
     model.eval()
     auroc_metric = metrics.ROC_AUC()
-    for data, targets in dataloader:
+    progress = tqdm(
+        dataloader,
+        total=len(dataloader),
+        desc="     Eval",
+        unit="batch",
+        dynamic_ncols=True,
+        leave=True,
+    )
+    for data, targets in progress:
         data, targets = data.to(device), targets.to(device)
         with torch.no_grad():
             ret = model(data)
@@ -113,7 +131,7 @@ def eval_once(dataloader, model, device):
         targets = targets.flatten()
         auroc_metric.update((outputs, targets))
     auroc = auroc_metric.compute()
-    print("AUROC: {}".format(auroc))
+    tqdm.write("     AUROC: {}".format(auroc))
 
 
 def train(args):
@@ -135,7 +153,13 @@ def train(args):
 
     for epoch in range(args.epochs):
         train_one_epoch(
-            train_dataloader, model, optimizer, epoch, device, args.log_interval
+            train_dataloader,
+            model,
+            optimizer,
+            epoch,
+            args.epochs,
+            device,
+            args.log_interval,
         )
         if (epoch + 1) % args.eval_interval == 0:
             eval_once(test_dataloader, model, device)
